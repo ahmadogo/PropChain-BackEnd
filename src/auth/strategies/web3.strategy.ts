@@ -28,11 +28,13 @@ export class Web3Strategy extends PassportStrategy(Strategy, 'web3') {
     let user = await this.userService.findByWalletAddress(walletAddress);
     
     if (!user) {
-      // Create user if doesn't exist
+      // FIX: Added firstName and lastName to satisfy CreateUserDto
       user = await this.userService.create({
         email: `${walletAddress}@wallet.auth`,
-        password: Math.random().toString(36),
+        password: Math.random().toString(36).slice(-10),
         walletAddress,
+        firstName: 'Web3',
+        lastName: 'User',
       });
     }
 
@@ -41,17 +43,12 @@ export class Web3Strategy extends PassportStrategy(Strategy, 'web3') {
 
   private async verifySignature(walletAddress: string, signature: string): Promise<boolean> {
     try {
-      // Create a message to verify against (in a real app, this would be a challenge)
-      const message = `Welcome to PropChain!
-
-Click to sign in and accept the Terms of Service.
-
-Timestamp: ${Date.now()}`;
+      // Note: In production, the message should be retrieved from a nonce stored in Redis 
+      // to prevent replay attacks.
+      const message = `Welcome to PropChain!\n\nClick to sign in and accept the Terms of Service.`;
       
-      // Recover the address from the signature
       const recoveredAddress = ethers.verifyMessage(message, signature);
       
-      // Compare the recovered address with the provided wallet address
       return recoveredAddress.toLowerCase() === walletAddress.toLowerCase();
     } catch (error) {
       console.error('Error verifying signature:', error);

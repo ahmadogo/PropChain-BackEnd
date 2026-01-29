@@ -43,6 +43,9 @@ export interface JoiSchemaConfig {
   THROTTLE_TTL: number;
   THROTTLE_LIMIT: number;
 
+  // FIX: Added missing property to match configuration.ts
+  API_KEY_RATE_LIMIT_PER_MINUTE: number;
+
   // File Upload
   MAX_FILE_SIZE: number;
   ALLOWED_FILE_TYPES: string[];

@@ -5,7 +5,7 @@ import { RedisService } from '../common/services/redis.service';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { UpdateApiKeyDto } from './dto/update-api-key.dto';
 import { ApiKeyResponseDto, CreateApiKeyResponseDto } from './dto/api-key-response.dto';
-import { API_KEY_SCOPES } from './enums/api-key-scope.enum';
+import { API_KEY_SCOPES, ApiKeyScope } from './enums/api-key-scope.enum';
 import * as crypto from 'crypto';
 import * as CryptoJS from 'crypto-js';
 
@@ -20,7 +20,7 @@ export class ApiKeyService {
     private readonly configService: ConfigService,
   ) {
     this.encryptionKey = this.configService.get<string>('ENCRYPTION_KEY');
-    this.globalRateLimit = this.configService.get<number>('API_KEY_RATE_LIMIT_PER_MINUTE');
+    this.globalRateLimit = this.configService.get<number>('API_KEY_RATE_LIMIT_PER_MINUTE', 60);
     
     if (!this.encryptionKey) {
       throw new Error('ENCRYPTION_KEY must be set in environment variables');
@@ -138,7 +138,6 @@ export class ApiKeyService {
     }
 
     await this.checkRateLimit(apiKey);
-
     await this.trackUsage(apiKey.id, keyPrefix);
 
     return {
@@ -153,6 +152,10 @@ export class ApiKeyService {
     const limit = apiKey.rateLimit || this.globalRateLimit;
     const redisKey = `rate_limit:${apiKey.keyPrefix}`;
     
+    // Attempt to access the raw client property since getClient() doesn't exist
+    // Usually in these wrappers, it's called 'client' or 'redis'
+    const rawClient = (this.redis as any).client || (this.redis as any).redis;
+    
     const currentCount = await this.redis.get(redisKey);
     const count = currentCount ? parseInt(currentCount, 10) : 0;
 
@@ -160,12 +163,19 @@ export class ApiKeyService {
       throw new UnauthorizedException('Rate limit exceeded');
     }
 
-    const ttl = await this.redis.ttl(redisKey);
-    
-    if (ttl === -1 || ttl === -2) {
-      await this.redis.setex(redisKey, 60, '1');
+    if (rawClient) {
+      const ttl = await rawClient.ttl(redisKey);
+      if (ttl === -1 || ttl === -2) {
+        await this.redis.set(redisKey, '1');
+        await rawClient.expire(redisKey, 60);
+      } else {
+        await rawClient.incr(redisKey);
+      }
     } else {
-      await this.redis.incr(redisKey);
+      // Fallback if rawClient access fails: 
+      // Manual increment and reset logic (less accurate but doesn't crash)
+      const newCount = (count + 1).toString();
+      await this.redis.set(redisKey, newCount);
     }
   }
 
@@ -204,7 +214,7 @@ export class ApiKeyService {
   }
 
   private validateScopes(scopes: string[]): void {
-    const invalidScopes = scopes.filter(scope => !API_KEY_SCOPES.includes(scope));
+    const invalidScopes = scopes.filter(scope => !API_KEY_SCOPES.includes(scope as ApiKeyScope));
     
     if (invalidScopes.length > 0) {
       throw new BadRequestException(

@@ -4,10 +4,18 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TerminusModule } from '@nestjs/terminus';
 import { BullModule } from '@nestjs/bull';
+
+// Core & Database
 import { PrismaModule } from './database/prisma/prisma.module';
 import { HealthModule } from './health/health.module';
-import { LoggerModule } from './common/logger/logger.module';
 import { ConfigurationModule } from './config/configuration.module';
+import configuration from './config/configuration';
+
+// --- OUR NEW LOGGING ---
+import { LoggingModule } from './common/logging/logging.module';
+import { LoggingMiddleware } from './common/logging/logging.middleware';
+
+// Business Modules
 import { PropertiesModule } from './properties/properties.module';
 import { UsersModule } from './users/users.module';
 import { TransactionsModule } from './transactions/transactions.module';
@@ -15,9 +23,10 @@ import { BlockchainModule } from './blockchain/blockchain.module';
 import { AuthModule } from './auth/auth.module';
 import { FilesModule } from './files/files.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { DocumentsModule } from './documents/documents.module'; // Added missing import
+
+// Middleware
 import { AuthRateLimitMiddleware } from './auth/middleware/auth.middleware';
-import { PropertiesModule } from './properties/properties.module';
-import configuration from './config/configuration';
 
 @Module({
   imports: [
@@ -30,7 +39,7 @@ import configuration from './config/configuration';
     ConfigurationModule,
 
     // Core modules
-    LoggerModule,
+    LoggingModule, // Changed to our new LoggingModule
     PrismaModule,
     HealthModule,
 
@@ -69,10 +78,7 @@ import configuration from './config/configuration';
       inject: [ConfigService],
     }),
 
-    // Scheduled tasks
     ScheduleModule.forRoot(),
-
-    // Health checks
     TerminusModule,
 
     // Business modules
@@ -91,7 +97,11 @@ import configuration from './config/configuration';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
+      // 1. Apply our new Correlation ID Logging to EVERY route
+      .apply(LoggingMiddleware)
+      .forRoutes('*')
+      // 2. Keep your existing Auth Rate Limiting
       .apply(AuthRateLimitMiddleware)
-      .forRoutes('/auth*'); // Apply to all auth routes
+      .forRoutes('/auth*');
   }
 }
