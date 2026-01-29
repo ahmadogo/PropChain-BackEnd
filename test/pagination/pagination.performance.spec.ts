@@ -18,7 +18,7 @@ describe('Pagination Service - Performance Tests', () => {
       const total = 1_000_000;
       const start = Date.now();
 
-      const meta = service.createMetadata(total, 50000, 20);
+      const meta = service.createMetadata(total, 50000, 20, 'createdAt', 'desc');
 
       const duration = Date.now() - start;
 
@@ -32,7 +32,7 @@ describe('Pagination Service - Performance Tests', () => {
         id: i,
         name: `Item ${i}`,
       }));
-      const query: PaginationQueryDto = { page: 1, limit: 100 };
+      const query: PaginationQueryDto = { page: 1, limit: 100, sortBy: 'createdAt', sortOrder: 'desc' };
 
       const start = Date.now();
 
@@ -89,7 +89,7 @@ describe('Pagination Service - Performance Tests', () => {
       const start = Date.now();
 
       extremeCases.forEach(({ total, page, limit }) => {
-        service.createMetadata(total, page, limit);
+        service.createMetadata(total, page, limit, 'createdAt', 'desc');
       });
 
       const duration = Date.now() - start;
@@ -107,7 +107,7 @@ describe('Pagination Service - Performance Tests', () => {
         status: i % 3,
       }));
 
-      const query: PaginationQueryDto = { page: 1, limit: 1000 };
+      const query: PaginationQueryDto = { page: 1, limit: 1000, sortBy: 'createdAt', sortOrder: 'desc' };
       const start = Date.now();
 
       for (let i = 0; i < 10; i++) {
@@ -125,7 +125,7 @@ describe('Pagination Service - Performance Tests', () => {
     it('should handle pagination for single item efficiently', () => {
       const start = Date.now();
 
-      const meta = service.createMetadata(1, 1, 100);
+      const meta = service.createMetadata(1, 1, 100, 'createdAt', 'desc');
 
       const duration = Date.now() - start;
 
@@ -136,7 +136,7 @@ describe('Pagination Service - Performance Tests', () => {
     it('should handle pagination for exactly one page of items', () => {
       const start = Date.now();
 
-      const meta = service.createMetadata(10, 1, 10);
+      const meta = service.createMetadata(10, 1, 10, 'createdAt', 'desc');
 
       const duration = Date.now() - start;
 
@@ -148,7 +148,7 @@ describe('Pagination Service - Performance Tests', () => {
     it('should handle very high page numbers efficiently', () => {
       const start = Date.now();
 
-      const meta = service.createMetadata(10_000_000, 1_000_000, 10);
+      const meta = service.createMetadata(10_000_000, 1_000_000, 10, 'createdAt', 'desc');
 
       const duration = Date.now() - start;
 
@@ -165,13 +165,13 @@ describe('Pagination Service - Performance Tests', () => {
         'Complex pagination (page 500, limit 50)': () =>
           service.calculatePagination(500, 50),
         'Metadata generation (100 items)': () =>
-          service.createMetadata(100, 1, 10),
+          service.createMetadata(100, 1, 10, 'createdAt', 'desc'),
         'Metadata generation (1M items)': () =>
-          service.createMetadata(1_000_000, 1, 10),
+          service.createMetadata(1_000_000, 1, 10, 'createdAt', 'desc'),
         'Parse query': () =>
-          service.parsePaginationQuery({ page: 2, limit: 20 }),
+          service.parsePaginationQuery({ page: 2, limit: 20, sortBy: 'createdAt', sortOrder: 'desc' }),
         'Prisma options': () =>
-          service.getPrismaOptions({ page: 1, limit: 10 }),
+          service.getPrismaOptions({ page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' }),
       };
 
       console.log('\n📊 Pagination Service Performance Benchmarks:');

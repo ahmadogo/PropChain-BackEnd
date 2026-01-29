@@ -71,10 +71,10 @@ export class PaginationService {
    */
   createMetadata(
     total: number,
-    page: number,
-    limit: number,
-    sortBy: string,
-    sortOrder: 'asc' | 'desc',
+    page: number = 1,
+    limit: number = 10,
+    sortBy: string = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
   ): PaginationMetadataDto {
     const pages = Math.max(Math.ceil(total / limit), 1);
 

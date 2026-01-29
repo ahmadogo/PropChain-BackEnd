@@ -40,6 +40,7 @@ describe('AuthService', () => {
         {
           provide: RedisService,
           useValue: {
+            set: jest.fn(),
             setex: jest.fn(),
             get: jest.fn(),
             del: jest.fn(),
@@ -56,18 +57,22 @@ describe('AuthService', () => {
     it('should register a new user', async () => {
       const createUserDto: CreateUserDto = {
         email: 'test@example.com',
-        password: 'password123',
+        password: 'Password1!',
+        firstName: 'Test',
+        lastName: 'User',
       };
 
       jest.spyOn(userService, 'create').mockResolvedValue({
         id: '1',
         email: 'test@example.com',
+        password: null,
         isVerified: false,
-        isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
         walletAddress: null,
-      });
+        role: 'USER',
+        roleId: null,
+      } as any);
 
       const result = await authService.register(createUserDto);
       expect(result).toEqual({ message: 'User registered successfully. Please check your email for verification.' });

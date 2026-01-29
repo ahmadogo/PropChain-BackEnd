@@ -78,7 +78,7 @@ class PaginationPerformanceBenchmark {
         createdAt: new Date(),
       }));
 
-      const query: PaginationQueryDto = { page: 1, limit: 10 };
+      const query: PaginationQueryDto = { page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' };
       const iterations = 10000;
       const startTime = performance.now();
 
@@ -129,7 +129,7 @@ class PaginationPerformanceBenchmark {
     const totalItems = [1000, 10000, 100000, 1000000];
 
     for (const total of totalItems) {
-      const query: PaginationQueryDto = { page: 1, limit: 10 };
+      const query: PaginationQueryDto = { page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' };
       const startTime = performance.now();
 
       const result = this.paginationService.formatResponse(

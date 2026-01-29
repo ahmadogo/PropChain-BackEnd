@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
-import sharp from 'sharp';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sharp = require('sharp');
 import { StorageConfig } from '../../src/config/storage.config';
 import {
   DocumentAccessLevel,
