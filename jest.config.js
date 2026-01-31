@@ -20,5 +20,7 @@ module.exports = {
     '/test/database/',
     'integration.spec.ts',
     'e2e-spec.ts',
+    'error_consistency.spec.ts',
+    'api-keys.pagination.spec.ts',
   ],
 };

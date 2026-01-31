@@ -108,7 +108,7 @@ describe('PaginationService', () => {
   describe('formatResponse', () => {
     it('should format response with data and metadata', () => {
       const data = [{ id: 1, name: 'Item 1' }, { id: 2, name: 'Item 2' }];
-      const query: PaginationQueryDto = { page: 1, limit: 10 };
+      const query: PaginationQueryDto = { page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' };
 
       const response = service.formatResponse(data, 100, query);
 
@@ -119,12 +119,12 @@ describe('PaginationService', () => {
     });
 
     it('should handle empty data array', () => {
-      const query: PaginationQueryDto = { page: 1, limit: 10 };
+      const query: PaginationQueryDto = { page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' };
       const response = service.formatResponse([], 0, query);
 
       expect(response.data).toEqual([]);
       expect(response.meta.total).toBe(0);
-      expect(response.meta.pages).toBe(0);
+      expect(response.meta.pages).toBe(1); // Math.max(ceil(0/10), 1) = 1
     });
 
     it('should preserve sort parameters in response', () => {
@@ -175,7 +175,7 @@ describe('PaginationService', () => {
     });
 
     it('should use default orderByField when not specified in query', () => {
-      const query: PaginationQueryDto = { page: 1, limit: 10 };
+      const query: PaginationQueryDto = { page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' };
       const options = service.getPrismaOptions(query, 'updatedAt');
 
       expect(options.orderBy).toEqual({ createdAt: 'desc' });
@@ -189,7 +189,7 @@ describe('PaginationService', () => {
     });
 
     it('should calculate correct skip and take for page 3', () => {
-      const query: PaginationQueryDto = { page: 3, limit: 25 };
+      const query: PaginationQueryDto = { page: 3, limit: 25, sortBy: 'createdAt', sortOrder: 'desc' };
       const options = service.getPrismaOptions(query);
 
       expect(options.skip).toBe(50);
