@@ -13,6 +13,9 @@ import { ConfigurationModule } from './config/configuration.module';
 import configuration from './config/configuration';
 import valuationConfig from './config/valuation.config';
 
+// Caching
+import { CacheModule } from './common/cache/cache.module';
+
 // Logging
 import { LoggingModule } from './common/logging/logging.module';
 import { LoggingInterceptor } from './common/logging/logging.interceptor';
@@ -49,6 +52,9 @@ import { AuthRateLimitMiddleware } from './auth/middleware/auth.middleware';
       envFilePath: ['.env.local', '.env.development', '.env'],
     }),
     ConfigurationModule,
+
+    // Caching
+    CacheModule,
 
     // Core
     LoggingModule,

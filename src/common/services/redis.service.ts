@@ -59,4 +59,17 @@ export class RedisService {
   async incr(key: string): Promise<number> {
     return await this.redis.incr(key);
   }
+
+  async publish(channel: string, message: string): Promise<number> {
+    return await this.redis.publish(channel, message);
+  }
+
+  getRedisInstance(): Redis {
+    return this.redis;
+  }
+
+  async eval(script: string, keys: string[], args: string[]): Promise<any> {
+    return await this.redis.eval(script, keys.length, ...keys, ...args);
+  }
 }
+
