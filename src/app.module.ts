@@ -42,6 +42,9 @@ import { AuditController } from './common/controllers/audit.controller';
 
 // Middleware
 import { AuthRateLimitMiddleware } from './auth/middleware/auth.middleware';
+import { LoggerModule } from './common/logger/logger.module';
+import { CorrelationMiddleware } from './common/middleware/correlation.middleware';
+import { MetricsModule } from './observability/metrics.module';
 
 @Module({
   imports: [
@@ -61,6 +64,7 @@ import { AuthRateLimitMiddleware } from './auth/middleware/auth.middleware';
     PrismaModule,
     HealthModule,
     RedisModule,
+    LoggerModule,
 
     // Security & rate limiting
     ThrottlerModule.forRootAsync({
@@ -99,6 +103,7 @@ import { AuthRateLimitMiddleware } from './auth/middleware/auth.middleware';
     // Compliance & Security
     AuditModule,
     RbacModule,
+    MetricsModule
   ],
   controllers: [
     AuditController, // Add the audit controller
@@ -114,6 +119,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       // Auth rate limiting
+      .apply(CorrelationMiddleware).forRoutes('*')
       .apply(AuthRateLimitMiddleware)
       .forRoutes('/auth*');
   }

@@ -14,8 +14,12 @@ import { LoggingInterceptor } from './common/logging/logging.interceptor';
 // FIX: Corrected import name from AppExceptionFilter to AllExceptionsFilter
 import { AllExceptionsFilter } from './common/errors/error.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import { initSentry } from './config/sentry.config';
+import { SentryFilter } from './common/filters/sentry.filter';
 
 async function bootstrap() {
+  initSentry();
+
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
@@ -52,7 +56,7 @@ async function bootstrap() {
 
   // Global filters and interceptors
   // FIX: Removed arguments from AllExceptionsFilter because the constructor expects 0
-  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalFilters(new SentryFilter());
 
   // Using 'as any' to bypass the strict LoggerService interface mismatch
   app.useGlobalInterceptors(new ResponseInterceptor(logger as any), new LoggingInterceptor(logger as any));
