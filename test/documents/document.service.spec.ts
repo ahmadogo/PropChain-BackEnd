@@ -2,10 +2,7 @@ import { Test } from '@nestjs/testing';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const sharp = require('sharp');
 import { StorageConfig } from '../../src/config/storage.config';
-import {
-  DocumentAccessLevel,
-  DocumentType,
-} from '../../src/documents/document.model';
+import { DocumentAccessLevel, DocumentType } from '../../src/documents/document.model';
 import {
   DocumentService,
   InMemoryStorageProvider,
@@ -100,11 +97,10 @@ describe('DocumentService', () => {
       { userId: 'user-2', roles: [] },
     );
 
-    const updated = await service.addDocumentVersion(
-      document.id,
-      createMockFile(Buffer.from('%PDF-1.4 updated')),
-      { userId: 'user-2', roles: [] },
-    );
+    const updated = await service.addDocumentVersion(document.id, createMockFile(Buffer.from('%PDF-1.4 updated')), {
+      userId: 'user-2',
+      roles: [],
+    });
 
     expect(updated.currentVersion).toBe(2);
     expect(updated.versions).toHaveLength(2);
@@ -123,15 +119,13 @@ describe('DocumentService', () => {
       { userId: 'owner-1', roles: [] },
     );
 
-    await expect(
-      service.getDocument(document.id, { userId: 'other-user', roles: [] }),
-    ).rejects.toThrow('You do not have permission');
+    await expect(service.getDocument(document.id, { userId: 'other-user', roles: [] })).rejects.toThrow(
+      'You do not have permission',
+    );
   });
 
   it('blocks infected files during virus scan', async () => {
-    const virusBuffer = Buffer.from(
-      'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*',
-    );
+    const virusBuffer = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
 
     await expect(
       service.uploadDocuments(

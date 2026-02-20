@@ -50,7 +50,7 @@ describe('Pagination Service - Performance Tests', () => {
       const start = Date.now();
 
       for (let i = 0; i < iterations; i++) {
-        service.calculatePagination(i % 100 + 1, (i % 10) * 10 + 10);
+        service.calculatePagination((i % 100) + 1, (i % 10) * 10 + 10);
       }
 
       const duration = Date.now() - start;
@@ -160,14 +160,10 @@ describe('Pagination Service - Performance Tests', () => {
   describe('Benchmark Results', () => {
     it('should provide performance summary', () => {
       const benchmarks = {
-        'Simple pagination (page 1, limit 10)': () =>
-          service.calculatePagination(1, 10),
-        'Complex pagination (page 500, limit 50)': () =>
-          service.calculatePagination(500, 50),
-        'Metadata generation (100 items)': () =>
-          service.createMetadata(100, 1, 10, 'createdAt', 'desc'),
-        'Metadata generation (1M items)': () =>
-          service.createMetadata(1_000_000, 1, 10, 'createdAt', 'desc'),
+        'Simple pagination (page 1, limit 10)': () => service.calculatePagination(1, 10),
+        'Complex pagination (page 500, limit 50)': () => service.calculatePagination(500, 50),
+        'Metadata generation (100 items)': () => service.createMetadata(100, 1, 10, 'createdAt', 'desc'),
+        'Metadata generation (1M items)': () => service.createMetadata(1_000_000, 1, 10, 'createdAt', 'desc'),
         'Parse query': () =>
           service.parsePaginationQuery({ page: 2, limit: 20, sortBy: 'createdAt', sortOrder: 'desc' }),
         'Prisma options': () =>
