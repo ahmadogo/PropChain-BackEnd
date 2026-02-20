@@ -6,8 +6,7 @@ import * as winston from 'winston';
 import * as DailyRotateFile from 'winston-daily-rotate-file';
 import { LoggingInterceptor } from './logging.interceptor';
 import { randomUUID } from 'crypto';
-import { LoggerModule } from 'nestjs-pino';
-
+import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
 
 @Global()
 @Module({
@@ -60,23 +59,22 @@ import { LoggerModule } from 'nestjs-pino';
         ],
       }),
     }),
-   LoggerModule.forRoot({
-  pinoHttp: {
-    level: process.env.LOG_LEVEL || 'info',
-    transport: {
-      targets: [
-        {
-          target: 'pino/file',
-          options: { destination: './logs/app.log', mkdir: true },
+    PinoLoggerModule.forRoot({
+        pinoHttp: {
+          level: process.env.LOG_LEVEL || 'info',
+          transport: {
+            targets: [
+              {
+                target: 'pino/file',
+                options: { destination: './logs/app.log', mkdir: true },
+              },
+              {
+                target: 'pino-pretty',
+              },
+            ],
+          },
         },
-        {
-          target: 'pino-pretty',
-        },
-      ],
-    },
-  },
-})
-
+    }),
   ],
   providers: [LoggerService, LoggingInterceptor],
   exports: [LoggerService, WinstonModule, LoggingInterceptor],
