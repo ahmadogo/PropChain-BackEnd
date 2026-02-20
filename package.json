@@ -127,6 +127,7 @@
     "@types/node": "^20.10.4",
     "@types/passport-jwt": "^3.0.13",
     "@types/passport-local": "^1.0.38",
+    "@types/shimmer": "^1.2.0",
     "@types/supertest": "^2.0.16",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
