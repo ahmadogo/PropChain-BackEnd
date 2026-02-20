@@ -39,6 +39,21 @@ export class AuthService {
   async login(credentials: { email?: string; password?: string; walletAddress?: string; signature?: string }) {
     let user: any;
 
+    // brute force protection
+    const identifier = credentials.email || credentials.walletAddress;
+    const maxAttempts = this.configService.get<number>('MAX_LOGIN_ATTEMPTS', 5);
+    const attemptWindow = this.configService.get<number>('LOGIN_ATTEMPT_WINDOW', 600); // seconds
+    const attemptsKey = identifier ? `login_attempts:${identifier}` : null;
+
+    if (attemptsKey) {
+      const existing = await this.redisService.get(attemptsKey);
+      const attempts = parseInt(existing || '0', 10);
+      if (attempts >= maxAttempts) {
+        this.logger.warn('Too many login attempts', { identifier });
+        throw new UnauthorizedException('Too many login attempts. Please try again later.');
+      }
+    }
+
     try {
       if (credentials.email && credentials.password) {
         user = await this.validateUserByEmail(credentials.email, credentials.password);
@@ -50,7 +65,18 @@ export class AuthService {
 
       if (!user) {
         this.logger.warn('Invalid login attempt', { email: credentials.email });
+        // increment attempt count only for email-based logins
+        if (attemptsKey) {
+          const existing = await this.redisService.get(attemptsKey);
+          const attempts = parseInt(existing || '0', 10) + 1;
+          await this.redisService.setex(attemptsKey, attemptWindow, attempts.toString());
+        }
         throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // successful login, clear attempts
+      if (attemptsKey) {
+        await this.redisService.del(attemptsKey);
       }
 
       this.logger.logAuth('User login successful', { userId: user.id });

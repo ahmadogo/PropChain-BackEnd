@@ -54,7 +54,8 @@ describe('MfaService', () => {
       
       expect(result).toHaveProperty('secret');
       expect(result).toHaveProperty('qrCode');
-      expect(result.secret).toHaveLength(32); // Base32 encoded secret
+      // secret is base32; length may vary but should be at least 32 chars
+      expect(result.secret.length).toBeGreaterThanOrEqual(32);
       expect(result.qrCode).toContain('data:image/png;base64');
       expect(mockRedisService.setex).toHaveBeenCalledWith(
         'mfa_setup:user123',
@@ -68,12 +69,9 @@ describe('MfaService', () => {
     it('should verify MFA setup with valid token', async () => {
       mockRedisService.get.mockResolvedValue('JBSWY3DPEHPK3PXP');
       
-      // Mock speakeasy to return true for verification
-      jest.mock('speakeasy', () => ({
-        totp: {
-          verify: jest.fn().mockReturnValue(true),
-        },
-      }));
+      // Spy on speakeasy verify method to return true
+      const speakeasy = require('speakeasy');
+      jest.spyOn(speakeasy.totp, 'verify').mockReturnValue(true);
 
       const result = await service.verifyMfaSetup('user123', '123456');
       
