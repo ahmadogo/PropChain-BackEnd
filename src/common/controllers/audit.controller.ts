@@ -13,14 +13,7 @@ import {
   UseInterceptors,
   Req,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RbacGuard } from '../../auth/guards/rbac.guard';
 import { AuditService, AuditOperation } from '../services/audit.service';
@@ -34,6 +27,7 @@ import { Action } from '../../rbac/enums/action.enum';
 import { RequireScopes } from '../decorators/require-scopes.decorator';
 import { AuditInterceptor } from '../interceptors/audit.interceptor';
 
+// Audit controller
 @ApiTags('Audit & Compliance')
 @Controller('audit')
 @UseGuards(JwtAuthGuard, RbacGuard)
@@ -63,7 +57,7 @@ export class AuditController {
     @Query('endDate') endDate?: string,
   ) {
     const skip = (page - 1) * limit;
-    
+
     // Use audit service methods instead of direct prisma access
     let logs;
     if (tableName) {
@@ -107,10 +101,7 @@ export class AuditController {
   @ApiQuery({ name: 'endDate', required: true })
   @RequireScopes(Resource.AUDIT, Action.READ)
   @UseInterceptors(AuditInterceptor)
-  async generateComplianceReport(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-  ) {
+  async generateComplianceReport(@Query('startDate') startDate: string, @Query('endDate') endDate: string) {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -226,7 +217,7 @@ export class AuditController {
   @UseInterceptors(AuditInterceptor)
   async getAuditStats() {
     const logCounts = await this.auditService.getLogCounts();
-    
+
     return {
       totalLogs: Object.values(logCounts).reduce((sum, count) => sum + count, 0),
       byOperation: logCounts,
@@ -240,9 +231,9 @@ export class AuditController {
   @UseInterceptors(AuditInterceptor)
   async testEncryption() {
     if (!this.encryptionService.isEncryptionConfigured()) {
-      return { 
-        status: 'warning', 
-        message: 'Encryption is not properly configured. ENCRYPTION_KEY is missing.' 
+      return {
+        status: 'warning',
+        message: 'Encryption is not properly configured. ENCRYPTION_KEY is missing.',
       };
     }
 
@@ -254,7 +245,7 @@ export class AuditController {
       return {
         status: 'success',
         testPassed: testData === decrypted,
-        encryptedSample: encrypted.encrypted.substring(0, 20) + '...',
+        encryptedSample: `${encrypted.encrypted.substring(0, 20)}...`,
       };
     } catch (error) {
       return {

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../database/prisma/prisma.service';
 import axios from 'axios';
 import { Decimal } from '@prisma/client/runtime/library';
+import { CacheService } from '../common/services/cache.service';
 
 export interface PropertyFeatures {
   id?: string;
@@ -39,6 +40,7 @@ export class ValuationService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService, // Inject the cache service
   ) {
     this.externalApis = {
       zillow: {
@@ -46,21 +48,28 @@ export class ValuationService {
         apiKey: this.configService.get('valuation.externalApi.zillowApiKey'),
       },
       redfin: {
-        baseUrl: 'https://redfin.com/stingray/',
+        baseUrl: 'https://api.redfin.com/v1',
         apiKey: this.configService.get('valuation.externalApi.redfinApiKey'),
       },
       corelogic: {
         baseUrl: 'https://api.corelogic.com/v1',
-        apiKey: this.configService.get('valuation.externalApi.coreLogicApiKey'),
+        apiKey: this.configService.get('valuation.externalApi.corelogicApiKey'),
       },
     };
   }
 
-  /**
-   * Main method to get property valuation
-   */
   async getValuation(propertyId: string, features?: PropertyFeatures): Promise<ValuationResult> {
     const cacheKey = `valuation:${propertyId}`;
+    const cacheTtl = this.configService.get<number>('valuation.valuation.cacheTtl', 86400); // 24 hours default
+
+    // Try to get from cache first
+    const cachedValuation = await this.cacheService.get<ValuationResult>(cacheKey);
+    if (cachedValuation) {
+      this.logger.log(`Cache HIT for property ${propertyId}`);
+      return cachedValuation;
+    }
+
+    this.logger.log(`Cache MISS for property ${propertyId}, fetching fresh valuation`);
 
     // Skip cache implementation for now since cache service is not available
 
@@ -123,7 +132,11 @@ export class ValuationService {
       // Update property with valuation
       await this.updatePropertyWithValuation(propertyId, savedValuation);
 
-      // Cache implementation skipped since cache service is not available
+      // Cache the result with tags for easy invalidation
+      await this.cacheService.set(cacheKey, savedValuation, { ttl: cacheTtl });
+      await this.cacheService.tagEntry(cacheKey, ['valuation', 'property', propertyId]);
+
+      this.logger.log(`Successfully cached valuation for property ${propertyId}`);
 
       return savedValuation;
     } catch (error) {
@@ -268,41 +281,33 @@ export class ValuationService {
   }
 
   /**
-   * Normalize property features for consistent processing
+   * Normalize property features to standard format
    */
   private normalizeFeatures(features: PropertyFeatures): PropertyFeatures {
-    const normalized: PropertyFeatures = { ...features };
-
-    // Normalize location to standard format
-    if (normalized.location) {
-      normalized.location = normalized.location.trim().toLowerCase();
-    }
-
-    // Ensure numeric values are valid
-    if (typeof normalized.bedrooms === 'string') {
-      normalized.bedrooms = parseInt(normalized.bedrooms, 10);
-    }
-    if (typeof normalized.bathrooms === 'string') {
-      normalized.bathrooms = parseFloat(normalized.bathrooms);
-    }
-    if (typeof normalized.squareFootage === 'string') {
-      normalized.squareFootage = parseFloat(normalized.squareFootage);
-    }
-    if (typeof normalized.yearBuilt === 'string') {
-      normalized.yearBuilt = parseInt(normalized.yearBuilt, 10);
-    }
-    if (typeof normalized.lotSize === 'string') {
-      normalized.lotSize = parseFloat(normalized.lotSize);
-    }
-
-    // Set defaults for missing values
-    normalized.bedrooms = normalized.bedrooms ?? 0;
-    normalized.bathrooms = normalized.bathrooms ?? 0;
-    normalized.squareFootage = normalized.squareFootage ?? 0;
-    normalized.yearBuilt = normalized.yearBuilt ?? 0;
-    normalized.lotSize = normalized.lotSize ?? 0;
-
-    return normalized;
+    // Normalize location: trim and lowercase
+    const location = features.location ? features.location.trim().toLowerCase() : '';
+    
+    // Convert string values to numbers where appropriate
+    const bedrooms = typeof features.bedrooms === 'string' ? 
+      parseInt(features.bedrooms, 10) : features.bedrooms;
+    const bathrooms = typeof features.bathrooms === 'string' ? 
+      parseFloat(features.bathrooms) : features.bathrooms;
+    const squareFootage = typeof features.squareFootage === 'string' ? 
+      parseInt(features.squareFootage, 10) : features.squareFootage;
+    const yearBuilt = typeof features.yearBuilt === 'string' ? 
+      parseInt(features.yearBuilt, 10) : features.yearBuilt;
+    const lotSize = typeof features.lotSize === 'string' ? 
+      parseFloat(features.lotSize) : features.lotSize;
+    
+    return {
+      ...features,
+      location,
+      bedrooms: bedrooms || 0,
+      bathrooms: bathrooms || 0,
+      squareFootage: squareFootage || 0,
+      yearBuilt: yearBuilt || 0,
+      lotSize: lotSize || 0,
+    };
   }
 
   /**
@@ -412,18 +417,33 @@ export class ValuationService {
       where: { id: propertyId },
       data: updateData,
     });
+
+    // Invalidate related caches when property is updated
+    await this.invalidateRelatedCaches(propertyId);
   }
 
   /**
    * Get historical valuations for a property
    */
   async getPropertyHistory(propertyId: string): Promise<ValuationResult[]> {
+    const cacheKey = `valuation:history:${propertyId}`;
+    const cacheTtl = this.configService.get<number>('valuation.valuation.cacheTtl', 3600); // 1 hour for history
+
+    // Try to get from cache first
+    const cachedHistory = await this.cacheService.get<ValuationResult[]>(cacheKey);
+    if (cachedHistory) {
+      this.logger.log(`Cache HIT for property history ${propertyId}`);
+      return cachedHistory;
+    }
+
+    this.logger.log(`Cache MISS for property history ${propertyId}, fetching fresh data`);
+
     const valuations = await (this.prisma as any).propertyValuation?.findMany({
       where: { propertyId },
       orderBy: { valuationDate: 'desc' },
     });
 
-    return valuations.map(v => ({
+    const result = valuations.map(v => ({
       propertyId: v.propertyId,
       estimatedValue: Number(v.estimatedValue),
       confidenceScore: v.confidenceScore,
@@ -433,6 +453,12 @@ export class ValuationService {
       featuresUsed: v.featuresUsed ? JSON.parse(v.featuresUsed as string) : undefined,
       rawData: v.rawData ? JSON.parse(v.rawData as string) : undefined,
     }));
+
+    // Cache the result with tags
+    await this.cacheService.set(cacheKey, result, { ttl: cacheTtl });
+    await this.cacheService.tagEntry(cacheKey, ['valuation-history', 'property', propertyId]);
+
+    return result;
   }
 
   /**
@@ -487,19 +513,238 @@ export class ValuationService {
     };
   }
 
-  private calculateTrendDirection(data: any[]) {
-    if (data.length < 2) {
-      return 'insufficient_data';
+  private calculateTrendDirection(marketData: any[]): 'up' | 'down' | 'stable' {
+    if (marketData.length < 2) {
+      return 'stable';
     }
 
-    const firstValue = data[0]._avg.estimatedValue;
-    const lastValue = data[data.length - 1]._avg.estimatedValue;
+    const first = marketData[0]._avg.estimatedValue;
+    const last = marketData[marketData.length - 1]._avg.estimatedValue;
 
-    if (firstValue && lastValue) {
-      const changePercent = ((lastValue - firstValue) / firstValue) * 100;
-      return changePercent > 0 ? 'upward' : changePercent < 0 ? 'downward' : 'stable';
+    const change = ((last - first) / first) * 100;
+
+    if (change > 5) {
+      return 'up';
     }
+    if (change < -5) {
+      return 'down';
+    }
+    return 'stable';
+  }
 
-    return 'unknown';
+  /**
+   * Invalidate cache for a specific property valuation and related caches
+   */
+  async invalidatePropertyCache(propertyId: string): Promise<void> {
+    const cacheKey = `valuation:${propertyId}`;
+
+    // Invalidate with cascade to handle dependent caches
+    await this.cacheService.invalidateWithCascade(cacheKey);
+
+    this.logger.log(`Invalidated cache for property ${propertyId} with cascade`);
+  }
+
+  /**
+   * Invalidate related caches when property is updated
+   */
+  private async invalidateRelatedCaches(propertyId: string): Promise<void> {
+    // Invalidate property-related caches
+    await this.cacheService.invalidateByPattern(`property:${propertyId}*`);
+    await this.cacheService.invalidateByPattern(`valuation:${propertyId}*`);
+    await this.cacheService.invalidateByPattern(`document:property:${propertyId}*`);
+
+    this.logger.log(`Invalidated related caches for property ${propertyId}`);
+  }
+
+  /**
+   * Get cache metrics for valuations
+   */
+  getValuationCacheMetrics() {
+    return this.cacheService.getMetrics('valuation');
+  }
+
+  /**
+   * Invalidate all valuations for a specific location
+   */
+  async invalidateLocationValuations(location: string): Promise<void> {
+    // Invalidate all valuations for properties in this location
+    await this.cacheService.invalidateByPattern(`valuation:*${location}*`);
+    await this.cacheService.invalidateByPattern(`valuation:history:*${location}*`);
+
+    this.logger.log(`Invalidated valuations for location: ${location}`);
+  }
+
+  /**
+   * Conditional invalidation based on valuation thresholds
+   */
+  async conditionallyInvalidateValuations(condition: (value: any) => boolean): Promise<void> {
+    await this.cacheService.conditionalInvalidate('valuation:*', condition);
+    this.logger.log('Conditionally invalidated valuations based on provided condition');
+  }
+
+  /**
+   * Warm cache with frequently accessed property valuations
+   */
+  async warmValuationCache(): Promise<void> {
+    this.logger.log('Starting valuation cache warming process');
+
+    // Identify frequently accessed properties (e.g., recently viewed, popular locations)
+    const frequentlyAccessedProperties = await this.getFrequentlyAccessedProperties();
+
+    const warmupTasks = frequentlyAccessedProperties.map(property => ({
+      key: `valuation:${property.id}`,
+      factory: () => this.getFreshValuation(property.id, property),
+      options: { ttl: this.configService.get<number>('valuation.valuation.cacheTtl', 86400) },
+      condition: () => true, // Always run warming for these properties
+    }));
+
+    await this.cacheService.warmCache(warmupTasks);
+
+    this.logger.log(
+      `Completed warming cache for ${frequentlyAccessedProperties.length} frequently accessed properties`,
+    );
+  }
+
+  /**
+   * Warm cache with recent property valuations
+   */
+  async warmRecentValuations(): Promise<void> {
+    this.logger.log('Starting recent valuations cache warming');
+
+    // Get recently valued properties
+    const recentProperties = await this.getRecentValuedProperties();
+
+    const warmupTasks = recentProperties.map(property => ({
+      key: `valuation:history:${property.propertyId}`,
+      factory: () => this.getPropertyHistory(property.propertyId),
+      options: { ttl: this.configService.get<number>('valuation.history.cacheTtl', 3600) },
+      condition: () => true,
+    }));
+
+    await this.cacheService.warmCache(warmupTasks);
+
+    this.logger.log(`Completed warming cache for ${recentProperties.length} recent valuations`);
+  }
+
+  /**
+   * Get frequently accessed properties based on access logs or analytics
+   */
+  private async getFrequentlyAccessedProperties(limit: number = 10): Promise<any[]> {
+    // In a real implementation, this would query analytics/access logs
+    // For now, we'll return recently created properties as a proxy for frequently accessed
+    try {
+      const properties = await this.prisma.property.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          location: true,
+          bedrooms: true,
+          bathrooms: true,
+          squareFootage: true,
+          yearBuilt: true,
+          propertyType: true,
+          lotSize: true,
+        },
+      });
+
+      return properties;
+    } catch (error) {
+      this.logger.error(`Failed to get frequently accessed properties: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get recently valued properties
+   */
+  private async getRecentValuedProperties(limit: number = 10): Promise<Array<{ propertyId: string }>> {
+    try {
+      const recentValuations = await (this.prisma as any).propertyValuation?.findMany({
+        orderBy: { valuationDate: 'desc' },
+        take: limit,
+        select: {
+          propertyId: true,
+        },
+        distinct: ['propertyId'], // Get unique property IDs
+      });
+
+      return recentValuations;
+    } catch (error) {
+      this.logger.error(`Failed to get recent valued properties: ${error.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get fresh valuation without using cache
+   */
+  private async getFreshValuation(propertyId: string, features?: PropertyFeatures): Promise<ValuationResult> {
+    this.logger.log(`Fetching fresh valuation for property ${propertyId} (bypassing cache)`);
+
+    try {
+      // Get property from database if features not provided
+      if (!features) {
+        const property = await this.prisma.property.findUnique({
+          where: { id: propertyId },
+        });
+
+        if (!property) {
+          throw new NotFoundException(`Property with ID ${propertyId} not found`);
+        }
+
+        const prop = property as any;
+        features = {
+          id: prop.id,
+          location: prop.location,
+          bedrooms: prop.bedrooms || 0,
+          bathrooms: prop.bathrooms || 0,
+          squareFootage: prop.squareFootage ? Number(prop.squareFootage) : 0,
+          yearBuilt: prop.yearBuilt || new Date().getFullYear(),
+          propertyType: prop.propertyType || 'residential',
+          lotSize: prop.lotSize ? Number(prop.lotSize) : 0,
+        };
+      }
+
+      // Normalize features
+      const normalizedFeatures = this.normalizeFeatures(features);
+
+      // Get valuation from external APIs
+      const valuations = await Promise.all([
+        this.getZillowValuation(normalizedFeatures).catch(err => {
+          this.logger.warn(`Zillow API failed: ${err.message}`);
+          return null;
+        }),
+        this.getRedfinValuation(normalizedFeatures).catch(err => {
+          this.logger.warn(`Redfin API failed: ${err.message}`);
+          return null;
+        }),
+        this.getCoreLogicValuation(normalizedFeatures).catch(err => {
+          this.logger.warn(`CoreLogic API failed: ${err.message}`);
+          return null;
+        }),
+      ]);
+
+      // Filter out null results
+      const validValuations = valuations.filter(val => val !== null);
+
+      if (validValuations.length === 0) {
+        throw new HttpException('All external valuation APIs failed', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+
+      // Combine valuations using weighted average
+      const combinedValuation = this.combineValuations(validValuations);
+
+      // Save valuation to database
+      const savedValuation = await this.saveValuation(combinedValuation);
+
+      // Update property with valuation
+      await this.updatePropertyWithValuation(propertyId, savedValuation);
+
+      return savedValuation;
+    } catch (error) {
+      this.logger.error(`Fresh valuation failed for property ${propertyId}: ${error.message}`);
+      throw error;
+    }
   }
 }
