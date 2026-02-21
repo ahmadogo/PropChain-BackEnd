@@ -122,3 +122,6 @@ export class EnhancedApiKeyGuard implements CanActivate {
     }
   }
 }
+
+// Export alias for backward compatibility
+export const ApiKeyGuard = EnhancedApiKeyGuard;
